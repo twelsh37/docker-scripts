@@ -1,5 +1,79 @@
 # Description: PowerShell script to remove selected Docker containers, images, and volumes
 
+# Add this new function at the start of the file
+<#
+.SYNOPSIS
+Expands a string representation of a number or range into an array of integers.
+
+.DESCRIPTION
+This function takes a string input that represents either a single number or a range of numbers
+(e.g., "5" or "1-5") and converts it into an array of integers. For single numbers, it returns
+a single-element array. For ranges, it returns an array containing all numbers in that range,
+inclusive of start and end values.
+
+.PARAMETER range
+A string representing either a single number (e.g., "5") or a range of numbers (e.g., "1-5").
+
+.EXAMPLE
+Expand-NumberRange "5"
+Returns: @(5)
+
+.EXAMPLE
+Expand-NumberRange "1-5"
+Returns: @(1, 2, 3, 4, 5)
+
+.OUTPUTS
+System.Int32[] - An array of integers representing the expanded range.
+
+.THROWS
+System.Exception - Throws an exception if:
+- The range format is invalid
+- The start number is greater than the end number in a range
+- The input cannot be parsed as integers
+
+.NOTES
+Valid input formats:
+- Single number: "5"
+- Number range: "1-5"
+#>
+function Expand-NumberRange {
+    param (
+        # The string to parse, either a single number or a range (e.g., "5" or "1-5")
+        [Parameter(Mandatory = $true)]
+        [string]$range
+    )
+    
+    # Check if the input is a range (contains hyphen)
+    # Format: "start-end" (e.g., "1-5")
+    if ($range -match '^(\d+)-(\d+)$') {
+        # Extract start and end numbers from the matches
+        # $Matches[1] contains the first capture group (start number)
+        # $Matches[2] contains the second capture group (end number)
+        $start = [int]$Matches[1]
+        $end = [int]$Matches[2]
+        
+        # Validate that the start number isn't greater than the end number
+        # Example: "5-3" would be invalid
+        if ($start -gt $end) {
+            throw "Invalid range: start number ($start) cannot be greater than end number ($end)"
+        }
+        
+        # Return an array containing all numbers in the range (inclusive)
+        # The '..' operator in PowerShell creates a range of numbers
+        return $start..$end
+    }
+    # Check if the input is a single number
+    # Format: "number" (e.g., "5")
+    elseif ($range -match '^\d+$') {
+        # Convert the string to an integer and return it
+        return [int]$range
+    }
+    else {
+        # If the input doesn't match either format, throw an error
+        throw "Invalid format: Input must be either a single number or a range (e.g., '5' or '1-5')"
+    }
+}
+
 # Validates if a comma-separated string contains only integers within a valid range
 # Parameters:
 #   $numbers  - String containing comma-separated integers (e.g., "1,3,5")
@@ -13,20 +87,40 @@ function Test-ValidNumbers {
     )
     
     try {
-        # Check if the input string is empty or contains only whitespace
         if ([string]::IsNullOrWhiteSpace($numbers)) { return $false }
 
-        # Check if the input matches the pattern of integers separated by commas
-        # This regex ensures only digits and commas are allowed (no spaces)
-        if (-not ($numbers -match '^(\d+,)*\d+$')) { return $false }
+        # Updated regex to allow for ranges (e.g., "1-5,6,8-10")
+        if (-not ($numbers -match '^(\d+(-\d+)?)(,\d+(-\d+)?)*$')) { return $false }
 
-        # Convert the comma-separated string into an array of integers
-        $numArray = $numbers -split ',' | ForEach-Object { [int]$_ }
+        # Split into individual numbers and ranges
+        $parts = $numbers -split ',' | ForEach-Object { $_.Trim() }
+        
+        # Expand all numbers and ranges
+        $expandedNumbers = @()
+        foreach ($part in $parts) {
+            $expandedNumbers += Expand-NumberRange $part
+        }
 
-        # Validate that all numbers are within range (between 1 and maxValue)
-        return ($numArray | Where-Object { $_ -lt 1 -or $_ -gt $maxValue }).Count -eq 0
+        # Check for duplicates
+        if (($expandedNumbers | Group-Object | Where-Object { $_.Count -gt 1 }).Count -gt 0) {
+            Write-Host "Invalid input: Duplicate numbers detected"
+            return $false
+        }
+
+        # Check for overlapping ranges
+        $sortedNumbers = $expandedNumbers | Sort-Object
+        for ($i = 0; $i -lt $sortedNumbers.Count - 1; $i++) {
+            if ($sortedNumbers[$i] -eq $sortedNumbers[$i + 1]) {
+                Write-Host "Invalid input: Overlapping ranges detected"
+                return $false
+            }
+        }
+
+        # Validate range
+        return ($expandedNumbers | Where-Object { $_ -lt 1 -or $_ -gt $maxValue }).Count -eq 0
     }
     catch {
+        Write-Host "Error validating numbers: $_"
         return $false
     }
 }
@@ -131,7 +225,7 @@ do {
     # Users can either:
     # 1. Enter comma-separated numbers (e.g., "1,3,5")
     # 2. Press Enter to cancel the operation
-    $numbers = Read-Host "`nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5) or press Enter to cancel"
+    $numbers = Read-Host "`nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5,7-10,13) or press Enter to cancel"
     
     # Check if user wants to cancel the operation
     # This happens when:
@@ -155,7 +249,7 @@ do {
     # If validation fails, inform user of proper input format
     # Loop will continue until valid input is received
     if (-not $valid) {
-        Write-Host "Invalid input. Please enter only numbers between 1 and $($containers.Count), separated by commas (e.g., 1,3,5)"
+        Write-Host "Invalid input. Please enter only numbers between 1 and $($containers.Count), separated by commas (e.g., 1,3,5,7-10,13)"
     }
 } while (-not $valid)
 
@@ -164,7 +258,9 @@ do {
 
 # Convert the validated user input string into an array of integers
 # Example: "1,3,5" becomes @(1, 3, 5)
-$selectedNumbers = $numbers -split ',' | ForEach-Object { [int]$_.Trim() }
+$selectedNumbers = $numbers -split ',' | ForEach-Object { 
+    Expand-NumberRange $_.Trim()
+} | Sort-Object
 
 # Initialize a hashtable to track all Docker resources marked for removal
 # This structure will store:
