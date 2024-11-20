@@ -225,7 +225,8 @@ do {
     # Users can either:
     # 1. Enter comma-separated numbers (e.g., "1,3,5")
     # 2. Press Enter to cancel the operation
-    $numbers = Read-Host "`nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5,7-10,13) or press Enter to cancel"
+    Write-Host "`nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5,7-10,13) or press Enter to cancel: " -ForegroundColor Green -NoNewline
+    $numbers = Read-Host
     
     # Check if user wants to cancel the operation
     # This happens when:
@@ -249,7 +250,7 @@ do {
     # If validation fails, inform user of proper input format
     # Loop will continue until valid input is received
     if (-not $valid) {
-        Write-Host "Invalid input. Please enter only numbers between 1 and $($containers.Count), separated by commas (e.g., 1,3,5,7-10,13)"
+        Write-Host "Invalid input. Please enter only numbers between 1 and $($containers.Count), separated by commas (e.g., 1,3,5,7-10,13)" -ForegroundColor Red
     }
 } while (-not $valid)
 
@@ -308,7 +309,7 @@ Write-Host "`nThe following items will be removed:"
 
 # Display all containers marked for removal
 # Format: Container Name (ID: ContainerID)
-Write-Host "`nContainers:"
+Write-Host "`nContainers:" -ForegroundColor Cyan
 $resourcesToRemove.Containers | ForEach-Object {
     Write-Host "- $($_.Name) (ID: $($_.ContainerID))"
 }
@@ -316,7 +317,7 @@ $resourcesToRemove.Containers | ForEach-Object {
 # Display all unique images marked for removal
 # Note: Select-Object -Unique removes duplicate image entries
 # (same image might be used by multiple containers)
-Write-Host "`nAssociated Images:"
+Write-Host "`nAssociated Images:" -ForegroundColor Cyan
 $resourcesToRemove.Images | Select-Object -Unique | ForEach-Object {
     Write-Host "- $_"
 }
@@ -324,7 +325,7 @@ $resourcesToRemove.Images | Select-Object -Unique | ForEach-Object {
 # Display volumes only if there are any to remove
 # Prevents showing empty "Associated Volumes:" section
 if ($resourcesToRemove.Volumes.Count -gt 0) {
-    Write-Host "`nAssociated Volumes:"
+    Write-Host "`nAssociated Volumes:" -ForegroundColor Cyan
     # Show unique volume names (removes duplicates)
     $resourcesToRemove.Volumes | Select-Object -Unique | ForEach-Object {
         Write-Host "- $_"
@@ -333,7 +334,8 @@ if ($resourcesToRemove.Volumes.Count -gt 0) {
 
 # User Confirmation Section
 # Get explicit confirmation before proceeding with removal
-$confirm = Read-Host "`nDo you want to proceed with removal? (y/n)"
+Write-Host "`nDo you want to proceed with removal? (y/n)" -ForegroundColor Green -NoNewline
+$confirm = Read-Host
 
 # Exit if user doesn't confirm with 'y', 'Y', 'yes', or 'Yes'
 if ($confirm -notmatch '^(y|yes)$') {
@@ -346,19 +348,19 @@ if ($confirm -notmatch '^(y|yes)$') {
 # Containers must be removed first before images and volumes
 
 # Display header for container removal process
-Write-Host "`nRemoving selected containers..."
+Write-Host "`nRemoving selected containers..." -ForegroundColor Cyan
 
 # Process each container in the removal list
 foreach ($container in $resourcesToRemove.Containers) {
     # Inform user which container is being processed
-    Write-Host "Removing container: $($container.Name) (ID: $($container.ContainerID))"
+    Write-Host "Removing container: $($container.Name) (ID: $($container.ContainerID))" -ForegroundColor DarkYellow
     
     try {
         # Execute docker rm command with:
         # -f flag: Forces removal of running containers
         # Out-Null: Suppresses command output for cleaner logs
         # ContainerID: Uses ID instead of name for more reliable removal
-        docker rm -f $container.ContainerID | Out-Null
+        $null = docker rm -f $container.ContainerID *>&1
     }
     catch {
         # Handle any errors during container removal
@@ -373,20 +375,20 @@ foreach ($container in $resourcesToRemove.Containers) {
 # Images are removed after containers to resolve dependencies
 
 # Display header for image removal process
-Write-Host "`nRemoving associated images..."
+Write-Host "`nRemoving associated images..." -ForegroundColor Cyan  
 
 # Process each unique image in the removal list
 # Select-Object -Unique prevents attempting to remove the same image multiple times
 foreach ($image in ($resourcesToRemove.Images | Select-Object -Unique)) {
     # Inform user which image is being processed
-    Write-Host "Removing image: $image"
+    Write-Host "Removing image: $image" -ForegroundColor DarkYellow
     
     try {
         # Execute docker rmi command with:
         # -f flag: Forces removal of the image
         # Out-Null: Suppresses command output for cleaner logs
         # $image: References the full image name (e.g., nginx:latest)
-        docker rmi -f $image | Out-Null
+        docker rmi -f $image | Write-Host -ForegroundColor DarkYellow
     }
     catch {
         # Handle any errors during image removal
@@ -405,13 +407,13 @@ foreach ($image in ($resourcesToRemove.Images | Select-Object -Unique)) {
 # Only process volumes if there are any to remove
 if ($resourcesToRemove.Volumes.Count -gt 0) {
     # Display header for volume removal process
-    Write-Host "`nRemoving associated volumes..."
+    Write-Host "`nRemoving associated volumes..." -ForegroundColor Cyan
     
     # Process each unique volume in the removal list
     # Select-Object -Unique prevents attempting to remove the same volume multiple times
     foreach ($volume in ($resourcesToRemove.Volumes | Select-Object -Unique)) {
         # Inform user which volume is being processed
-        Write-Host "Removing volume: $volume"
+        Write-Host "Removing volume: $volume" -ForegroundColor DarkYellow
         
         try {
             # Execute docker volume rm command
@@ -431,4 +433,4 @@ if ($resourcesToRemove.Volumes.Count -gt 0) {
 }
 
 # Inform user of successful completion
-Write-Host "`nOperation completed."  
+Write-Host "`nOperation completed." -ForegroundColor Green
