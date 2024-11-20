@@ -9,33 +9,65 @@
 #   0 - If all numbers are valid
 #   1 - If any validation fails
 validate_numbers() {
-    local numbers=$1      # Input string of numbers
-    local max_value=$2    # Maximum allowed value
+    local numbers=$1
+    local max_value=$2
     
-    # Check if input is empty or only whitespace
-    # ${numbers// /} removes all spaces from the string
     if [[ -z "${numbers// }" ]]; then
         return 1
     fi
     
-    # Process each number in the comma-separated list
-    # IFS=',' sets the field separator to comma
-    # read -ra nums creates an array from the comma-separated string
-    IFS=',' read -ra nums <<< "$numbers"
-    for num in "${nums[@]}"; do
-        # Remove all whitespace from the current number
-        # tr -d '[:space:]' removes all whitespace characters
-        num=$(echo "$num" | tr -d '[:space:]')
+    # Updated regex to allow for ranges
+    if ! [[ $numbers =~ ^([0-9]+(-[0-9]+)?)(,[0-9]+(-[0-9]+)?)*$ ]]; then
+        return 1
+    fi
+    
+    # Array to store all expanded numbers
+    local all_numbers=()
+    
+    # Process each part (number or range)
+    IFS=',' read -ra parts <<< "$numbers"
+    for part in "${parts[@]}"; do
+        part=$(echo "$part" | tr -d '[:space:]')
+        
+        # Expand the range and add to array
+        while read -r num; do
+            if [ -z "$num" ] || [ "$num" -lt 1 ] || [ "$num" -gt "$max_value" ]; then
+                return 1
+            fi
+            all_numbers+=("$num")
+        done < <(expand_number_range "$part")
+    done
+    
+    # Check for duplicates
+    if [ "$(printf '%s\n' "${all_numbers[@]}" | sort -n | uniq -d | wc -l)" -gt 0 ]; then
+        echo "Invalid input: Duplicate numbers detected" >&2
+        return 1
+    fi
+    
+    return 0
+}
 
-        # Validate the number:
-        # 1. ^[0-9]+$ ensures it contains only digits
-        # 2. -lt 1 checks if less than 1
-        # 3. -gt "$max_value" checks if greater than maximum
-        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "$max_value" ]; then
+# Add new function to expand number ranges
+expand_number_range() {
+    local range="$1"
+    
+    # Check if input is a range (contains hyphen)
+    if [[ $range =~ ^([0-9]+)-([0-9]+)$ ]]; then
+        local start="${BASH_REMATCH[1]}"
+        local end="${BASH_REMATCH[2]}"
+        
+        if [ "$start" -gt "$end" ]; then
             return 1
         fi
-    done
-    return 0
+        
+        # Generate sequence of numbers
+        seq "$start" "$end"
+    # Check if input is a single number
+    elif [[ $range =~ ^[0-9]+$ ]]; then
+        echo "$range"
+    else
+        return 1
+    fi
 }
 
 # Container Data Collection Section
@@ -94,15 +126,20 @@ while IFS= read -r line; do
     volumes=$(docker inspect "$id" --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}')
     
     # Set default value if no volumes found
-    volumes=${volumes:="No volumes"}
+    volumes=${volumes:="None"}
+    
+    # Format volumes for display (one per line)
+    if [ "$volumes" != "None" ]; then
+        volumes=$(echo "$volumes" | tr ' ' '\n' | sed 's/^/    /')
+    fi
     
     # Store complete container information in associative array
     # Format: "ContainerID|ImageName|ContainerName|Status|Volumes"
     container_map["$index"]="$id|$image|$name|$status|$volumes"
     
-    # Display container information in formatted output
-    # [Number] Container: Name (ID: XXX) Image: XXX Volumes: XXX Status: XXX
-    echo "[$index] Container: $name (ID: $id) Image: $image Volumes: $volumes Status: $status"
+    # Updated display format to match PowerShell
+    printf "[$index] Container: %s\nID: %s\nImage: %s\nStatus: %s\nVolumes:\n%s\n\n" \
+           "$name" "$id" "$image" "$status" "$volumes"
     
     # Increment counter for next container
     ((index++))
@@ -121,7 +158,7 @@ while true; do
     # - Format (comma-separated numbers)
     # - Example input
     # - Cancellation option
-    echo -e "\nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5) or press Enter to cancel"
+    echo -e "\nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5,7-10,13) or press Enter to cancel"
     
     # Read user input into numbers variable
     # -r flag prevents backslash escapes from being interpreted
