@@ -66,10 +66,10 @@ $containers = docker ps -a --format "{{.ID}}|{{.Image}}|{{.Names}}|{{.Status}}" 
     # This makes the data easily accessible and manageable
     [PSCustomObject]@{
         ContainerID = $containerId  # Container's unique identifier
-        Image = $parts[1]          # Name of the Docker image
-        Name = $parts[2]           # Container's name
-        Status = $parts[3]         # Current status (running, exited, etc.)
-        Volumes = $volumeList      # List of attached volumes or "No volumes"
+        Image = $parts[1]           # Name of the Docker image
+        Name = $parts[2]            # Container's name
+        Status = $parts[3]          # Current status (running, exited, etc.)
+        Volumes = $volumeList       # List of attached volumes or "No volumes"
     }
 }
 
@@ -81,33 +81,46 @@ if ($containers.Count -eq 0) {
 }
 
 # Display all containers with numbered indices for user selection
-# Creates a numbered list of containers with their details and stores them in a lookup dictionary
-
-# Add blank line and header for better readability
 Write-Host "`nList of Docker containers:`n"
 
-# Initialize a hashtable to store containers with their index numbers
-# This allows easy lookup when user selects containers by number
 $indexed = @{}
 
-# Loop through each container and create a numbered list
-for ($i = 0; $i -lt $containers.Count; $i++) {
-    $index = $i + 1                    # Convert to 1-based index for user-friendly display
-    $container = $containers[$i]        # Get current container object
+# Create custom table entries with proper volume handling
+$tableEntries = for ($i = 0; $i -lt $containers.Count; $i++) {
+    $index = $i + 1
+    $container = $containers[$i]
     
-    # Display container information in a formatted string:
-    # - Index number in brackets
-    # - Container name
-    # - Container ID
-    # - Image name
-    # - Associated volumes
-    # - Current status
-    Write-Host "[$index] Container: $($container.Name) (ID: $($container.ContainerID)) Image: $($container.Image) Volumes: $($container.Volumes) Status: $($container.Status)"
+    # Handle volumes display
+    $volumeList = if ($container.Volumes -ne "No volumes") {
+        # Split volumes into array and format each on new line without indent
+        ($container.Volumes -split ',').Trim() -join "`n"
+    } else {
+        "None"
+    }
     
-    # Store container in hashtable with index as key
-    # This makes it easy to retrieve containers when user inputs numbers
+    # Create custom object for table display
+    [PSCustomObject]@{
+        '#' = "[$index]"
+        'Container Name' = $container.Name
+        'Container ID' = $container.ContainerID
+        'Image' = $container.Image
+        'Status' = $container.Status
+        'Volumes' = $volumeList
+    }
+    
+    # Store container in indexed lookup
     $indexed[$index] = $container
 }
+
+# Display formatted table with left alignment
+$tableEntries | Format-Table -AutoSize -Wrap -Property @(
+    @{Label='#'; Expression={$_.'#'}; Align='Left'},
+    @{Label='Container Name'; Expression={$_.'Container Name'}; Align='Left'},
+    @{Label='Container ID'; Expression={$_.'Container ID'}; Align='Left'},
+    @{Label='Image'; Expression={$_.Image}; Align='Left'},
+    @{Label='Status'; Expression={$_.Status}; Align='Left'},
+    @{Label='Volumes'; Expression={$_.Volumes}; Align='Left'}
+)
 
 # User Input Section
 # This section handles container selection through a validation loop
