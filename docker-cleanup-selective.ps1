@@ -335,8 +335,8 @@ if ($resourcesToRemove.Volumes.Count -gt 0) {
 # Get explicit confirmation before proceeding with removal
 $confirm = Read-Host "`nDo you want to proceed with removal? (y/n)"
 
-# Exit if user doesn't confirm with 'y'
-if ($confirm -ne 'y') {
+# Exit if user doesn't confirm with 'y', 'Y', 'yes', or 'Yes'
+if ($confirm -notmatch '^(y|yes)$') {
     Write-Host "Operation cancelled."
     exit
 }
