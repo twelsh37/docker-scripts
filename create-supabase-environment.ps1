@@ -83,6 +83,6 @@ catch {
 }
 finally {
 # Change back to docker-scripts directory
-Write-Host "Changing back to dicker-scripts folder..." -ForegroundColor Cyan
+Write-Host "Changing back to docker-scripts folder..." -ForegroundColor Cyan
 Set-Location -Path "E:\data\vscodeproject\docker-scripts" -ErrorAction Stop
 }
