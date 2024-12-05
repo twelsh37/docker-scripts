@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 # Function: validate_numbers
 # Purpose: Validates user input for container selection
@@ -25,7 +25,7 @@ validate_numbers() {
     local all_numbers=()
     
     # Process each part (number or range)
-    IFS=',' read -ra parts <<< "$numbers"
+    parts=(${(s:,:)numbers})
     for part in "${parts[@]}"; do
         part=$(echo "$part" | tr -d '[:space:]')
         
@@ -34,7 +34,7 @@ validate_numbers() {
             if [ -z "$num" ] || [ "$num" -lt 1 ] || [ "$num" -gt "$max_value" ]; then
                 return 1
             fi
-            all_numbers+=("$num")
+            all_numbers=($all_numbers $num)
         done < <(expand_number_range "$part")
     done
     
@@ -105,45 +105,45 @@ index=1
 
 # Declare associative array for storing container information
 # This allows easy lookup using the display number as key
-declare -A container_map
+typeset -A container_map
 
 # Display header for container list
 echo -e "\nList of Docker containers:\n"
 
-# Process each container line from previous docker ps output
+# First, print the header
+printf "%-4s %-30s %-15s %-30s %-20s %-20s\n" \
+    "#" "CONTAINER NAME" "CONTAINER ID" "IMAGE" "STATUS" "VOLUMES"
+printf "%s\n" "$(printf '=%.0s' {1..120})"  # Separator line
+
+# Process each container line
 while IFS= read -r line; do
-    # Split the line into components using | as delimiter
-    # Variables:
-    #   id     - Container ID
-    #   image  - Image name
-    #   name   - Container name
-    #   status - Container status
-    IFS='|' read -r id image name status <<< "$line"
+    IFS='|' read -r id image name container_state <<< "$line"
     
-    # Get volume information for this container using docker inspect
-    # Format string extracts only volume mounts (not bind mounts)
-    # --format uses Go template to filter for volume type mounts
+    # Get volume information
     volumes=$(docker inspect "$id" --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}')
-    
-    # Set default value if no volumes found
     volumes=${volumes:="None"}
     
-    # Format volumes for display (one per line)
+    # Store in container_map (keep this for later use)
+    container_map["$index"]="$id|$image|$name|$container_state|$volumes"
+    
+    # Format the volumes for display (join multiple volumes with comma)
     if [ "$volumes" != "None" ]; then
-        volumes=$(echo "$volumes" | tr ' ' '\n' | sed 's/^/    /')
+        volumes=$(echo "$volumes" | tr '\n' ',' | sed 's/,$//')
     fi
     
-    # Store complete container information in associative array
-    # Format: "ContainerID|ImageName|ContainerName|Status|Volumes"
-    container_map["$index"]="$id|$image|$name|$status|$volumes"
+    # Print table row
+    printf "%-4s %-30s %-15s %-30s %-20s %-20s\n" \
+        "[$index]" \
+        "${name:0:29}" \
+        "${id:0:12}" \
+        "${image:0:29}" \
+        "${container_state:0:19}" \
+        "${volumes:0:19}"
     
-    # Updated display format to match PowerShell
-    printf "[$index] Container: %s\nID: %s\nImage: %s\nStatus: %s\nVolumes:\n%s\n\n" \
-           "$name" "$id" "$image" "$status" "$volumes"
-    
-    # Increment counter for next container
     ((index++))
 done <<< "$container_data"
+
+printf "%s\n" "$(printf '=%.0s' {1..120})"  # Bottom separator line
 
 # Store total number of containers for validation
 max_containers=$((index - 1))
@@ -158,7 +158,7 @@ while true; do
     # - Format (comma-separated numbers)
     # - Example input
     # - Cancellation option
-    echo -e "\nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5,7-10,13) or press Enter to cancel"
+    printf "\nEnter the numbers of containers to remove (comma-separated, e.g., 1,3,5,7-10,13) or press Enter to cancel: "
     
     # Read user input into numbers variable
     # -r flag prevents backslash escapes from being interpreted
@@ -186,84 +186,103 @@ done
 
 # Resource Collection Section
 # Purpose: Organize all resources (containers, images, volumes) that will be removed
-# Creates separate arrays for each resource type to manage cleanup process
+
+# Debug: Print the input numbers
+echo "Debug: Input numbers string: $numbers" >&2
+
+selected_nums=()
+
+# Process each part (number or range) using zsh array splitting
+parts=(${(s:,:)numbers})  # zsh-specific splitting
+
+echo "Debug: Parts after splitting: ${parts[*]}" >&2
+
+for part in "${parts[@]}"; do
+    # Clean the part of any whitespace
+    part=$(echo "$part" | tr -d '[:space:]')
+    echo "Debug: Processing part: $part" >&2
+    
+    # Directly process the number if it's not a range
+    if [[ ! "$part" =~ "-" ]]; then
+        selected_nums+=($part)
+    else
+        # Process range
+        while IFS= read -r num; do
+            selected_nums+=($num)
+        done < <(expand_number_range "$part")
+    fi
+done
+
+echo "Debug: Selected numbers: ${selected_nums[*]}" >&2
+echo "Debug: Available container map keys: ${(k)container_map[@]}" >&2
 
 # Initialize arrays for storing resources to be removed
-declare -a containers_to_remove=()  # Array for container IDs and names
-declare -a images_to_remove=()      # Array for image names
-declare -a volumes_to_remove=()     # Array for volume names
-
-# Split the validated user input into array of numbers
-# IFS=',' sets comma as delimiter for reading numbers
-IFS=',' read -ra selected_nums <<< "$numbers"
+containers_to_remove=()
+images_to_remove=()
+volumes_to_remove=()
 
 # Process each selected container number
 for num in "${selected_nums[@]}"; do
-    # Remove any whitespace from the number
-    num=$(echo "$num" | tr -d '[:space:]')
+    echo "Debug: Processing container number: $num" >&2
     
-    # Extract container information from container_map
-    # Split stored string into components:
-    # - id: Container ID
-    # - image: Image name
-    # - name: Container name
-    # - status: Container status
-    # - volumes: Associated volumes
-    IFS='|' read -r id image name status volumes <<< "${container_map[$num]}"
+    # Get container info from map using zsh associative array syntax
+    container_info=$container_map[$num]
+    echo "Debug: Container info from map: '$container_info'" >&2
     
-    # Add container to removal list
-    # Format: "ContainerID|ContainerName"
-    containers_to_remove+=("$id|$name")
+    # Skip if container info doesn't exist
+    if [[ -z "$container_info" ]]; then
+        echo "Warning: No container found for number $num" >&2
+        continue
+    fi
     
-    # Add container's image to removal list
-    images_to_remove+=("$image")
+    # Split the container info into components using zsh read
+    IFS='|' read -r id image name status volumes <<< "$container_info"
     
-    # Process volumes if container has any
-    # Skip if container has "No volumes"
-    if [ "$volumes" != "No volumes" ]; then
-        # Add each volume to removal list
-        # Splits volume string on spaces
-        for volume in $volumes; do
-            volumes_to_remove+=("$volume")
-        done
+    # Debug the split values
+    echo "Debug: Split values:" >&2
+    echo "  ID: '$id'" >&2
+    echo "  Image: '$image'" >&2
+    echo "  Name: '$name'" >&2
+    echo "  Status: '$status'" >&2
+    echo "  Volumes: '$volumes'" >&2
+    
+    # Add to removal lists
+    if [[ -n "$id" && -n "$name" ]]; then
+        containers_to_remove+=("$id|$name")
+        [[ -n "$image" ]] && images_to_remove+=("$image")
+        
+        # Process volumes
+        if [[ "$volumes" != "None" && -n "$volumes" ]]; then
+            for volume in ${=volumes}; do
+                [[ -n "$volume" ]] && volumes_to_remove+=("$volume")
+            done
+        fi
     fi
 done
 
 # Resource Removal Summary Section
-# Purpose: Display a comprehensive list of all resources that will be removed
-# Provides user with final review before confirmation
-
-# Display summary header
 echo -e "\nThe following items will be removed:"
 
 # Display containers section
 echo -e "\nContainers:"
-# Process each container in the removal list
-# Format stored: "ContainerID|ContainerName"
 for container in "${containers_to_remove[@]}"; do
-    # Split container string into ID and name
     IFS='|' read -r id name <<< "$container"
-    # Display in user-friendly format
-    echo "- $name (ID: $id)"
+    echo "- $name (ID: ${id:0:12})"
 done
 
 # Display images section
 echo -e "\nAssociated Images:"
-# Process images with deduplication:
-# 1. printf outputs array elements with newlines
-# 2. sort -u removes duplicates
-# 3. while loop processes each unique image
-printf '%s\n' "${images_to_remove[@]}" | sort -u | while read -r image; do
-    echo "- $image"
-done
+if [ ${#images_to_remove[@]} -gt 0 ]; then
+    printf '%s\n' "${images_to_remove[@]}" | sort -u | while read -r image; do
+        [ -n "$image" ] && echo "- $image"
+    done
+fi
 
-# Display volumes section (only if volumes exist)
-# ${#volumes_to_remove[@]} gets the array length
+# Display volumes section
 if [ ${#volumes_to_remove[@]} -gt 0 ]; then
     echo -e "\nAssociated Volumes:"
-    # Process volumes with deduplication (same as images)
     printf '%s\n' "${volumes_to_remove[@]}" | sort -u | while read -r volume; do
-        echo "- $volume"
+        [ -n "$volume" ] && echo "- $volume"
     done
 fi
 
