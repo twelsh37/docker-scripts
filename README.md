@@ -21,6 +21,6 @@ The user is presented with a list of running Containers and asked to select whic
 
 
 ## docker-cleanup-selective.sh
-This is a Linux/UNIX/Mac OSX shell script that will clean up docker containers and volumes selectively based on the container names.
+This is a Linux/UNIX/Mac OSX shell script that will clean up docker containers and volumes selectively based on the container names. It functions like its Powershell counterpart. 
 The user is presented with a list of running Containers and asked to select which ones to remove.
 
