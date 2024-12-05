@@ -11,7 +11,7 @@ It comprises of 4 scripts that carry out various different tasks.
 | docker-cleanup-selective.ps1    | PowerShell script to remove selected Docker containers, images, and volumes |
 | docker-cleanup-selective.sh     | Bash script to remove selected Docker containers, images, and volumes       |
 
-##Example of docker-cleanup-selective.ps1 running
+## Example of docker-cleanup-selective.ps1 running
 ### docker-cleanup-selective.ps1
 This is a Windows PowerShell script that will clean up docker containers and volumes selectively based on the container names.
 The user is presented with a list of running Containers and asked to select which ones to remove.
