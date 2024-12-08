@@ -1,17 +1,20 @@
 <#
 .SYNOPSIS
-    Creates and starts a new Supabase development environment.
+    Creates a local install of Supabase. You can use all their tools locally
 
 .DESCRIPTION
-    This script creates a new Supabase development environment using Scoop package manager.
+    This script creates a local install of a,Supabase environment using Scoop package manager.
     It adds the Supabase bucket, installs Supabase, and starts the development environment.
 
 .NOTES
-    Last Updated: 2024-03-19
+    Last Updated: 2024-12-08
     Requirements:
         - Scoop package manager
         - Administrator privileges may be required
         - Internet connection for GitHub access
+
+    This is primarily for my own installs so has my paths embedded. I may get round to 
+    making it more dynamic.
 
 .EXAMPLE
     .\create-supabase-environment.ps1
@@ -54,11 +57,17 @@ try {
     Write-Host "Changing to project directory..." -ForegroundColor Cyan
     Set-Location -Path $projectPath -ErrorAction Stop
 
-    # Add latest Supabase bucket
-    Write-Host "Adding latest Supabase bucket..." -ForegroundColor Cyan
-    scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to add Supabase bucket"
+    # Add latest Supabase bucket if it doesn't exist
+    Write-Host "Checking Supabase bucket..." -ForegroundColor Cyan
+    $existingBuckets = (scoop bucket list) | ForEach-Object { $_.Name }
+    if ($existingBuckets -notcontains "supabase") {
+        Write-Host "Adding Supabase bucket..." -ForegroundColor Cyan
+        scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to add Supabase bucket"
+        }
+    } else {
+        Write-Host "Supabase bucket already exists, skipping..." -ForegroundColor Yellow
     }
 
     # Install Supabase
