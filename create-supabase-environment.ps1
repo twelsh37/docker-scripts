@@ -46,10 +46,42 @@ try {
         throw "Scoop is not installed. Please install Scoop first."
     }
 
+    # Add Windows Forms assembly for folder browser dialog
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    # Create and show folder browser dialog in a separate thread
+    $form = New-Object System.Windows.Forms.Form -Property @{
+        TopMost = $true
+        TopLevel = $true
+    }
+    $form.ShowInTaskbar = $false
+    $form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    $folderBrowser.Description = "Select installation directory for Supabase"
+    $folderBrowser.RootFolder = [System.Environment+SpecialFolder]::MyComputer
+    $folderBrowser.ShowNewFolderButton = $true
+
+    $form.Add_Shown({
+        $form.Activate()
+        $result = $folderBrowser.ShowDialog($form)
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+            $script:projectPath = $folderBrowser.SelectedPath
+        } else {
+            $script:projectPath = $null
+        }
+        $form.Close()
+    })
+    $form.ShowDialog()
+
+    if ($null -eq $projectPath) {
+        throw "Installation cancelled by user"
+    }
+
     # Check if project directory exists
-    $projectPath = "E:\data\vscodeproject\supabase"
     if (-not (Test-Path -Path $projectPath)) {
-        Write-Host "Creating project directory..." -ForegroundColor Cyan
+        Write-Host "Creating project directory at $projectPath..." -ForegroundColor Cyan
         New-Item -Path $projectPath -ItemType Directory -Force | Out-Null
     }
 
