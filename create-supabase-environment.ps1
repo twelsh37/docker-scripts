@@ -41,6 +41,9 @@ function Write-ErrorLog {
 }
 
 try {
+    # Store the original location before changing directories
+    $originalLocation = Get-Location
+    
     # Check if Scoop is installed
     if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
         throw "Scoop is not installed. Please install Scoop first."
@@ -123,7 +126,7 @@ catch {
     exit 1
 }
 finally {
-# Change back to docker-scripts directory
-Write-Host "Changing back to docker-scripts folder..." -ForegroundColor Cyan
-Set-Location -Path "E:\data\vscodeproject\docker-scripts" -ErrorAction Stop
+    # Change back to original directory
+    Write-Host "Changing back to original folder..." -ForegroundColor Cyan
+    Set-Location -Path $originalLocation -ErrorAction Stop
 }
