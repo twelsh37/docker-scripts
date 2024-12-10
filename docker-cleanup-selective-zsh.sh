@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# Description: PowerShell script to remove selected Docker containers, images, and volumes
+# Usage: Run the script in a PowerShell environment
+
 # Function: validate_numbers
 # Purpose: Validates user input for container selection
 # Parameters:
@@ -16,8 +19,9 @@ validate_numbers() {
         return 1
     fi
     
-    # Updated regex to allow for ranges
+    # Check format: allows single numbers and ranges separated by commas
     if ! [[ $numbers =~ ^([0-9]+(-[0-9]+)?)(,[0-9]+(-[0-9]+)?)*$ ]]; then
+        echo "Invalid format. Use numbers and ranges separated by commas (e.g., 1,2,3-5)" >&2
         return 1
     fi
     
@@ -25,17 +29,40 @@ validate_numbers() {
     local all_numbers=()
     
     # Process each part (number or range)
-    parts=(${(s:,:)numbers})
+    local parts=(${(s:,:)numbers})
     for part in "${parts[@]}"; do
+        # Clean the part of any whitespace
         part=$(echo "$part" | tr -d '[:space:]')
         
-        # Expand the range and add to array
-        while read -r num; do
-            if [ -z "$num" ] || [ "$num" -lt 1 ] || [ "$num" -gt "$max_value" ]; then
+        # If it's a range (contains hyphen)
+        if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            local start="${match[1]}"
+            local end="${match[2]}"
+            
+            # Validate range order
+            if [ "$start" -gt "$end" ]; then
+                echo "Invalid range: $start-$end. Start number must be less than end number." >&2
                 return 1
             fi
-            all_numbers=($all_numbers $num)
-        done < <(expand_number_range "$part")
+            
+            # Validate range bounds
+            if [ "$start" -lt 1 ] || [ "$end" -gt "$max_value" ]; then
+                echo "Numbers must be between 1 and $max_value" >&2
+                return 1
+            fi
+            
+            # Add range numbers to array
+            for ((i=start; i<=end; i++)); do
+                all_numbers+=($i)
+            done
+        else
+            # Single number
+            if ! [[ $part =~ ^[0-9]+$ ]] || [ "$part" -lt 1 ] || [ "$part" -gt "$max_value" ]; then
+                echo "Numbers must be between 1 and $max_value" >&2
+                return 1
+            fi
+            all_numbers+=($part)
+        fi
     done
     
     # Check for duplicates
@@ -47,21 +74,23 @@ validate_numbers() {
     return 0
 }
 
-# Add new function to expand number ranges
 expand_number_range() {
     local range="$1"
     
     # Check if input is a range (contains hyphen)
     if [[ $range =~ ^([0-9]+)-([0-9]+)$ ]]; then
-        local start="${BASH_REMATCH[1]}"
-        local end="${BASH_REMATCH[2]}"
+        local start="${match[1]}"
+        local end="${match[2]}"
         
+        # Ensure start is less than end
         if [ "$start" -gt "$end" ]; then
             return 1
         fi
         
         # Generate sequence of numbers
-        seq "$start" "$end"
+        for ((i=start; i<=end; i++)); do
+            echo "$i"
+        done
     # Check if input is a single number
     elif [[ $range =~ ^[0-9]+$ ]]; then
         echo "$range"
@@ -187,20 +216,14 @@ done
 # Resource Collection Section
 # Purpose: Organize all resources (containers, images, volumes) that will be removed
 
-# Debug: Print the input numbers
-echo "Debug: Input numbers string: $numbers" >&2
-
 selected_nums=()
 
 # Process each part (number or range) using zsh array splitting
-parts=(${(s:,:)numbers})  # zsh-specific splitting
-
-echo "Debug: Parts after splitting: ${parts[*]}" >&2
+parts=(${(s:,:)numbers})
 
 for part in "${parts[@]}"; do
     # Clean the part of any whitespace
     part=$(echo "$part" | tr -d '[:space:]')
-    echo "Debug: Processing part: $part" >&2
     
     # Directly process the number if it's not a range
     if [[ ! "$part" =~ "-" ]]; then
@@ -213,9 +236,6 @@ for part in "${parts[@]}"; do
     fi
 done
 
-echo "Debug: Selected numbers: ${selected_nums[*]}" >&2
-echo "Debug: Available container map keys: ${(k)container_map[@]}" >&2
-
 # Initialize arrays for storing resources to be removed
 containers_to_remove=()
 images_to_remove=()
@@ -223,28 +243,16 @@ volumes_to_remove=()
 
 # Process each selected container number
 for num in "${selected_nums[@]}"; do
-    echo "Debug: Processing container number: $num" >&2
-    
-    # Get container info from map using zsh associative array syntax
-    container_info=$container_map[$num]
-    echo "Debug: Container info from map: '$container_info'" >&2
+    # Get container info from map using quoted key
+    container_info="${container_map["$num"]}"
     
     # Skip if container info doesn't exist
     if [[ -z "$container_info" ]]; then
-        echo "Warning: No container found for number $num" >&2
         continue
     fi
     
-    # Split the container info into components using zsh read
-    IFS='|' read -r id image name status volumes <<< "$container_info"
-    
-    # Debug the split values
-    echo "Debug: Split values:" >&2
-    echo "  ID: '$id'" >&2
-    echo "  Image: '$image'" >&2
-    echo "  Name: '$name'" >&2
-    echo "  Status: '$status'" >&2
-    echo "  Volumes: '$volumes'" >&2
+    # Split the container info into components using a different variable name for status
+    IFS='|' read -r id image name container_status volumes <<< "$container_info"
     
     # Add to removal lists
     if [[ -n "$id" && -n "$name" ]]; then
