@@ -1,4 +1,5 @@
 # Description: PowerShell script to remove selected Docker containers, images, and volumes
+# Usage: Run the script in a PowerShell environment
 
 # Add this new function at the start of the file
 <#
