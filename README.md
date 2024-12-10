@@ -9,9 +9,9 @@ It comprises of 4 scripts that carry out various different tasks.
 | create-supabase-environment.ps1     | Powershell script that creates a local install of Supabase using Docker      |
 | remove-supabase-environment.ps1     | Removes Supabase bucket and installation                                     |
 | docker-cleanup-selective.ps1        | PowerShell script to remove selected Docker containers, images, and volumes  |
-| docker-cleanup-selective-zsh-sh     | zsh script to remove selected Docker containers, images, and volumes. Tested on a Mac Mini running Sequoia 15.1.1       |
-| create-supabase-ebvironment-zsh.sh  | zsh script script that creates a local install of Supabase  using docker and homebrew. Tested on a Mac Mini running Sequoia 15.1.1 |
-| remove-supabase-environment-zsh.sh  | zsh script script that removes a local install of Supabase using homebrew. Tested on a Mac Mini running Sequoia 15.1.1  |
+| docker-cleanup-selective-zsh-sh     | zsh script to remove selected Docker containers, images, and volumes. Tested on Sequoia 15.1.1       |
+| create-supabase-ebvironment-zsh.sh  | zsh script script that creates a local install of Supabase  using docker and homebrew. Tested on Sequoia 15.1.1 |
+| remove-supabase-environment-zsh.sh  | zsh script script that removes a local install of Supabase using homebrew. Tested on Sequoia 15.1.1  |
 
 ## Example of docker-cleanup-selective.ps1 running
 ### docker-cleanup-selective.ps1
